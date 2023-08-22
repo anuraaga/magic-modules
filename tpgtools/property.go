@@ -897,7 +897,14 @@ func createPropertiesFromSchema(schema *openapi.Schema, typeFetcher *TypeFetcher
 			note := "**Note**: This field is non-authoritative, and will only manage the labels present in your configuration. " +
 				"Please refer to the field `effective_labels` for all of the labels present on the resource."
 			p.Description = fmt.Sprintf("%s\n\n%s", p.Description, note)
+			p.Settable = false
+			p.StateGetter = nil
+
 			props = append(props, build_effective_labels_field(p, resource, parent))
+
+			if p.IsResourceLabels() {
+				props = append(props, build_terraform_labels_field(p, resource, parent))
+			}
 		}
 
 		props = append(props, p)
@@ -929,7 +936,7 @@ func build_effective_labels_field(p Property, resource *Resource, parent *Proper
 	description := fmt.Sprintf("All of %s (key/value pairs) present on the resource in GCP, including the %s configured through Terraform, other clients and services.", p.title, p.title)
 	stateSetter := fmt.Sprintf("d.Set(%q, res.%s)", title, p.PackageName)
 
-	return Property{
+	effectiveLabels := Property{
 		title:       title,
 		Type:        p.Type,
 		Description: description,
@@ -937,6 +944,29 @@ func build_effective_labels_field(p Property, resource *Resource, parent *Proper
 		parent:      parent,
 		Optional:    false,
 		Computed:    true,
+		PackageName: p.PackageName,
+		Settable:    true,
+		StateSetter: &stateSetter,
+	}
+
+	stateGetter := effectiveLabels.DefaultStateGetter()
+	effectiveLabels.StateGetter = &stateGetter
+	return effectiveLabels
+}
+
+func build_terraform_labels_field(p Property, resource *Resource, parent *Property) Property {
+	title := fmt.Sprintf("terraform_%s", p.title)
+	description := fmt.Sprintf("The combination of %s configured directly on the resource and default %s configured on the provider.", p.title, p.title)
+	stateSetter := fmt.Sprintf("d.Set(%q, flatten%sTerraform%s(res.%s, d))", title, p.resource.PathType(), p.PackagePath(), p.PackageName)
+
+	return Property{
+		title:       title,
+		Type:        p.Type,
+		Description: description,
+		resource:    resource,
+		parent:      parent,
+		Computed:    true,
+		PackageName: p.PackageName,
 		StateSetter: &stateSetter,
 	}
 }
