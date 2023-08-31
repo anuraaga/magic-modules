@@ -391,3 +391,66 @@ func TestFrameworkProvider_LoadAndValidateFramework_credentials(t *testing.T) {
 // 		}
 // 	})
 // }
+
+func TestFrameworkProvider_LoadAndValidateFramework_accessToken(t *testing.T) {
+
+	// Note: In the test function we need to set the below fields in test case's fwmodels.ProviderModel value
+	// this is to stop the code under tests experiencing errors, and could be addressed in future refactoring.
+	// - ImpersonateServiceAccountDelegates: If we don't set this, we get a nil pointer exception ¯\_(ツ)_/¯
+
+	cases := map[string]struct {
+		ConfigValues              fwmodels.ProviderModel
+		EnvVariables              map[string]string
+		ExpectedDataModelValue    basetypes.StringValue // Sometimes the value is mutated, and no longer matches the original value we supply
+		// ExpectedConfigStructValue not used here, as credentials info isn't stored in the config struct
+		ExpectError               bool
+	}{
+		"access_token configured in the provider can be invalid without resulting in errors": {
+			ConfigValues: fwmodels.ProviderModel{
+				AccessToken: types.StringValue("This is not a valid token string"),
+			},
+			ExpectedDataModelValue: types.StringValue("This is not a valid token string"),
+		},
+
+	}
+
+	for tn, tc := range cases {
+		t.Run(tn, func(t *testing.T) {
+
+			// Arrange
+			acctest.UnsetTestProviderConfigEnvs(t)
+			acctest.SetupTestEnvs(t, tc.EnvVariables)
+
+			ctx := context.Background()
+			tfVersion := "foobar"
+			providerversion := "999"
+			diags := diag.Diagnostics{}
+			
+			data := tc.ConfigValues
+			impersonateServiceAccountDelegates, _ := types.ListValue(types.StringType, []attr.Value{}) // empty list
+			data.ImpersonateServiceAccountDelegates = impersonateServiceAccountDelegates
+
+			p := fwtransport.FrameworkProviderConfig{}
+
+			// Act
+			p.LoadAndValidateFramework(ctx, &data, tfVersion, &diags, providerversion)
+
+			// Assert
+			if diags.HasError() && tc.ExpectError {
+				return
+			}
+			if diags.HasError() && !tc.ExpectError {
+				for i, err := range diags.Errors() {
+					num := i + 1
+					t.Logf("unexpected error #%d : %s : %s", num, err.Summary(), err.Detail())
+				}
+				t.Fatalf("did not expect error, but [%d] error(s) occurred", diags.ErrorsCount())
+			}
+			// Checking mutation of the data model
+			if !data.AccessToken.Equal(tc.ExpectedDataModelValue) {
+				t.Fatalf("want project in the `fwmodels.ProviderModel` struct to be `%s`, but got the value `%s`", tc.ExpectedDataModelValue, data.AccessToken.String())
+			}
+			// fwtransport.FrameworkProviderConfig does not store the credentials info, so test does not make assertions on config struct
+		})
+	}
+}
