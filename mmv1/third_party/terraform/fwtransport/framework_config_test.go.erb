@@ -451,6 +451,14 @@ func TestFrameworkProvider_LoadAndValidateFramework_accessToken(t *testing.T) {
 		// 	},
 		// 	ExpectedDataModelValue: types.StringValue("value-from-GOOGLE_OAUTH_ACCESS_TOKEN"),
 		// },
+		// Handling unknown values
+		// TODO(SarahFrench) make these tests pass to address: https://github.com/hashicorp/terraform-provider-google/issues/14444
+		// "when access_token is an unknown value, the provider treats it as if it's unset (align to SDK behaviour)": {
+		// 	ConfigValues: fwmodels.ProviderModel{
+		// 		AccessToken: types.StringUnknown(),
+		// 	},
+		// 	ExpectedDataModelValue:    types.StringNull(),
+		// },
 	}
 
 	for tn, tc := range cases {
